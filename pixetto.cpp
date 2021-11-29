@@ -19,6 +19,7 @@
 #define PXT_CMD_GET_DATA    0xD8
 
 #define PXT_RET_FW_VERSION	0xE3
+#define PXT_RET_OBJNUM		0x46 //0xE4
 
 /*
 #define PXT_CMD_STREAMOFF	0x7A
@@ -387,46 +388,55 @@ namespace pixetto {
 		if (bOnStarting) 
 			return false;
 		
-		int a = 0;
-		for (a=0; a<DATA_SIZE; a++)
-			data_buf[a] = 0xFF;
-	
 		ssflush();
 		uint8_t cmd_buf[5] = {PXT_PACKET_START, 0x05, PXT_CMD_GET_DATA, 0, PXT_PACKET_END};
 		serial->send(cmd_buf, 5, ASYNC);
 
-		int read_len = 0;
-		int loop = 0;
 
-		do {
-			read_len = serial->read(data_buf, 1, ASYNC);
-			loop++;
-		} while (data_buf[0] != PXT_PACKET_START && loop < 300000);
-		
-		if (read_len == 0 || read_len == MICROBIT_NO_DATA) {
-			// TODO: RESET
+		while (1) 
+		{
+			int a = 0;
+			for (a=0; a<DATA_SIZE; a++)
+				data_buf[a] = 0xFF;
+	
+			int read_len = 0;
+			int loop = 0;
 
-			/*if (!checkcam()) {
-				uint8_t cmd_buf[5] = {PXT_PACKET_START, 0x05, PXT_CMD_RESET, 0, PXT_PACKET_END};
-				serial->send(cmd_buf, 5, ASYNC);
-				opencam(true);
-			}*/
-			return false;
+			do {
+				read_len = serial->read(data_buf, 1, ASYNC);
+				loop++;
+			} while (data_buf[0] != PXT_PACKET_START && loop < 300000);
+			
+			if (read_len == 0 || read_len == MICROBIT_NO_DATA) {
+				// TODO: RESET
+
+				/*if (!checkcam()) {
+					uint8_t cmd_buf[5] = {PXT_PACKET_START, 0x05, PXT_CMD_RESET, 0, PXT_PACKET_END};
+					serial->send(cmd_buf, 5, ASYNC);
+					opencam(true);
+				}*/
+				return false;
+			}
+
+			read_len = serial->read(&data_buf[1], 2);
+			data_len = data_buf[1];
+			if (data_len > 3) {
+				read_len = serial->read(&data_buf[3], data_len - 3);
+			}
+			else
+				return false;
+			
+			if (read_len != (data_len-3)) return false;
+			if (data_buf[data_len-1] != PXT_PACKET_END) return false;
+			if (!verifyChecksum(data_buf, data_len)) return false;
+			if (data_buf[2] == 0) return false; // num == 0
+			
+			
+			if (data_buf[2] == PXT_RET_OBJNUM)
+			{
+				continue;
+			}
 		}
-
-		read_len = serial->read(&data_buf[1], 2);
-		data_len = data_buf[1];
-		if (data_len > 3) {
-			read_len = serial->read(&data_buf[3], data_len - 3);
-		}
-		else
-			return false;
-		
-		if (read_len != (data_len-3)) return false;
-		if (data_buf[data_len-1] != PXT_PACKET_END) return false;
-		if (!verifyChecksum(data_buf, data_len)) return false;
-		if (data_buf[2] == 0) return false; // num == 0
-		
 		
 		if (data_buf[2] == DIGITS_OPERATION) {
 			m_x = data_buf[3];
